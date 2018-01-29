@@ -1,0 +1,653 @@
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//A-Star Pathfinding   (17.01.18)                                                                  //
+//                                                                                                 //
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//Variables:                   What they do:                                                       //
+//int       edges              number of neighbours every field has                                //
+//boolean   diagonalMovement   wether or not moving along a corner is allowed (standart=false)     //
+//                         (in case of three edges, this only concerns the corner pointing up/d0wn)//
+//if getCContent() of Square returns "1", that means the Square is NOT obstructed                  //
+//                                                                                                 //
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//Functions:                   What it does:                                                       //
+//displayField();              displays the obstacle-map                                           //
+//displayOL();                 displays the open-list and nodes that are on the open-list)         //
+//displayCL();                 displays the closed-list and nodes that are on the closed-list)     //
+//displayLastPath();           displays all nodes that lie on the most recent calculated path)     //
+//seek(PVector1,PVector2)      returns shortest path between the two nodes PVector1 and PVector2)  //
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class AStarPathFinding {
+
+  private int rows;
+  private int columns;
+  private int size;
+  private PVector pathFinder;
+
+  private boolean success=false;
+  private boolean unreachable=false;
+
+  private int edges;
+  private boolean diagonalMovement;
+
+  private PVector start;
+  private PVector target;
+  private Square[][] sQmap;
+  private int[][] obstMap;
+
+  private boolean noDistance;
+
+  private ArrayList<PVector> lastPath = new ArrayList<PVector>();
+
+  private ArrayList<PVector> openList = new ArrayList<PVector>();
+  private ArrayList<PVector> closedList = new ArrayList<PVector>();
+
+  AStarPathFinding(int[][] tCopyOfMap, int tSize, int tEdges) {
+    rows=tCopyOfMap.length;
+    columns=tCopyOfMap[1].length;
+    size=tSize;
+    obstMap=tCopyOfMap;
+    edges=tEdges;
+
+    sQmap = new Square[rows][columns];
+    copyMap();
+  }
+
+  void setDiagonalMovement(boolean t) {
+    diagonalMovement=t;
+  }
+
+  void copyExtMap(int[][] tMap) {
+    for (int x=0; x<rows; x++) {
+      for (int y=0; y<columns; y++) {
+
+        if (tMap[x][y]==0) {
+          sQmap[x][y] = new Square(x, y, 0, size);
+        } else {
+          sQmap[x][y] = new Square(x, y, 1, size);
+        }
+      }
+    }
+  }
+
+  //make a copy of the map, with info about walkable tiles
+  void copyMap() {
+    for (int x=0; x<rows; x++) {
+      for (int y=0; y<columns; y++) {
+
+        if (obstMap[x][y]==0) {
+          sQmap[x][y] = new Square(x, y, 0, size);
+        } else {
+          sQmap[x][y] = new Square(x, y, 1, size);
+        }
+      }
+    }
+
+    //clearOL();
+    //clearCL();
+  }
+
+  ArrayList<PVector> getNeighbours(PVector sq) {
+    ArrayList<PVector> temp = new ArrayList<PVector>();
+    switch(edges) {
+    case 3:
+      if (sq.x!=rows-1 && obstMap[int(sq.x)+1][int(sq.y)]!=0) {
+        temp.add(new PVector(int(sq.x)+1, int(sq.y)));
+      }
+      if (diagonalMovement) {          
+        if (sq.y!=columns-1 && obstMap[int(sq.x)][int(sq.y)+1]!=0) {
+          temp.add(new PVector(int(sq.x), int(sq.y)+1));
+        }
+        if (sq.y!=0 && obstMap[int(sq.x)][int(sq.y)-1]!=0) {
+          temp.add(new PVector(int(sq.x), int(sq.y)-1));
+        }
+      } else {
+        if ((sq.x+sq.y)%2==0) {
+          if (sq.y!=columns-1 && obstMap[int(sq.x)][int(sq.y)+1]!=0) {
+            temp.add(new PVector(int(sq.x), int(sq.y)+1));
+          }
+        } else { 
+          if (sq.y!=0 && obstMap[int(sq.x)][int(sq.y)-1]!=0) {
+            temp.add(new PVector(int(sq.x), int(sq.y)-1));
+          }
+        }
+      }
+      if (sq.x!=0 && obstMap[int(sq.x)-1][int(sq.y)]!=0) {
+        temp.add(new PVector(int(sq.x)-1, int(sq.y)));
+      }
+      break;
+    case 4:      
+      if (sq.y!=0 && obstMap[int(sq.x)][int(sq.y)-1]!=0) {
+        temp.add(new PVector(int(sq.x), int(sq.y)-1));
+      }
+      if (sq.x!=rows-1 && obstMap[int(sq.x)+1][int(sq.y)]!=0) {
+        temp.add(new PVector(int(sq.x)+1, int(sq.y)));
+      }
+      if (sq.y!=columns-1 && obstMap[int(sq.x)][int(sq.y)+1]!=0) {
+        temp.add(new PVector(int(sq.x), int(sq.y)+1));
+      }
+      if (sq.x!=0 && obstMap[int(sq.x)-1][int(sq.y)]!=0) {
+        temp.add(new PVector(int(sq.x)-1, int(sq.y)));
+      }
+      if (diagonalMovement) {
+        if (sq.y!=0 && sq.x!=rows-1 && obstMap[int(sq.x)+1][int(sq.y)-1]!=0 && obstMap[int(sq.x)][int(sq.y)-1]!=0 && obstMap[int(sq.x)+1][int(sq.y)]!=0) {
+          temp.add(new PVector(int(sq.x)+1, int(sq.y)-1));
+        }
+        if (sq.x!=rows-1 && sq.y!=columns-1 && obstMap[int(sq.x)+1][int(sq.y)+1]!=0 && obstMap[int(sq.x)+1][int(sq.y)]!=0 && obstMap[int(sq.x)][int(sq.y)+1]!=0) {
+          temp.add(new PVector(int(sq.x)+1, int(sq.y)+1));
+        }
+        if (sq.y!=columns-1 && sq.x!=0 && obstMap[int(sq.x)-1][int(sq.y)+1]!=0 && obstMap[int(sq.x)-1][int(sq.y)]!=0 && obstMap[int(sq.x)][int(sq.y)+1]!=0) {
+          temp.add(new PVector(int(sq.x)-1, int(sq.y)+1));
+        }
+        if (sq.x!=0 && sq.y!=0 && obstMap[int(sq.x)-1][int(sq.y)-1]!=0 && obstMap[int(sq.x)][int(sq.y)-1]!=0 && obstMap[int(sq.x)-1][int(sq.y)]!=0) {
+          temp.add(new PVector(int(sq.x)-1, int(sq.y)-1));
+        }
+      }
+      break;
+    case 6:
+      if (sq.y!=0 && obstMap[int(sq.x)][int(sq.y)-1]!=0) {
+        temp.add(new PVector(int(sq.x), int(sq.y)-1));
+      }
+      if (sq.y!=columns-1 && obstMap[int(sq.x)][int(sq.y)+1]!=0) {
+        temp.add(new PVector(int(sq.x), int(sq.y)+1));
+      }
+      if (sq.x!=rows-1 && obstMap[int(sq.x)+1][int(sq.y)]!=0) {
+        temp.add(new PVector(int(sq.x)+1, int(sq.y)));
+      }
+      if (sq.x!=rows-1 && sq.y!=columns-1 && obstMap[int(sq.x)+1][int(sq.y)+1]!=0) {
+        temp.add(new PVector(int(sq.x)+1, int(sq.y)+1));
+      }
+      if (sq.x!=0 && obstMap[int(sq.x)-1][int(sq.y)]!=0) {
+        temp.add(new PVector(int(sq.x)-1, int(sq.y)));
+      }
+      if (sq.x!=0 && sq.y!=columns-1 && obstMap[int(sq.x)-1][int(sq.y)+1]!=0) {
+        temp.add(new PVector(int(sq.x)-1, int(sq.y)+1));
+      }
+      break;
+    }
+    return temp;
+  }
+
+  void displayParentStructure() {
+    if (lastPath.size()!=0) {
+      pushMatrix();
+      translate((width-rows*size)/2+size/2, (height-columns*size)/2+size/2);
+
+
+      for (int i =lastPath.size()-1; i>0; i--) {
+        //println("latest path Vector: "+lastPath.get(i));
+        strokeWeight(3);
+        stroke(0, 0, 255);
+        //line(lastPath.get(i).x*size, lastPath.get(i).y*size, vToSq(lastPath.get(i)).getParent().x*size, vToSq(lastPath.get(i)).getParent().y*size);
+        line(lastPath.get(i).x*size, lastPath.get(i).y*size, lastPath.get(i-1).x*size, lastPath.get(i-1).y*size);
+        //println("i is: "+i);
+      }
+      popMatrix();
+    }
+  }
+
+  void displayField() {        
+    pushMatrix();
+    //translate((width-(rows*size))/2, (height-columns*size)/2);
+    for (int x=0; x<rows; x++) {
+      for (int y=0; y<columns; y++) {
+        if (x*size>camera.pos.x-width/2 && x*size<camera.pos.x+width/2 && y*size>camera.pos.y-height/2 && y*size<camera.pos.y+height/2) { //check x and y axis
+          sQmap[x][y].display();
+        }
+      }
+    }
+    popMatrix();
+  }
+
+  //get path going from target to startingpoint, save it in lastPath
+  ArrayList<PVector> seek(PVector tStart, PVector tTarget) {
+    copyMap();
+    //vToSq(target).setCContent(1);
+    //vToSq(start).setCContent(1);
+    lastPath.clear();
+    success=false;
+    unreachable=false;
+    noDistance=false;
+    clearCL();
+    clearOL();
+
+    start=tStart;
+    if (start.x<0) {
+      start.x=0;
+    } else if (start.x>=rows) {
+      start.x=rows-1;
+    }
+    if (start.y<0) {
+      start.y=0;
+    } else if (start.y>=columns) {
+      start.y=columns-1;
+    }
+
+    target=tTarget;
+    if (target.x<0) {
+      target.x=0;
+    } else if (target.x>=rows) {
+      target.x=rows-1;
+    }
+    if (target.y<0) {
+      target.y=0;
+    } else if (target.y>=columns) {
+      target.y=columns-1;
+    }
+
+    pathFinder=start;
+    setStartAndTarget(start, target);
+    obstMap[int(start.x)][int(start.y)]=4;
+    obstMap[int(target.x)][int(target.y)]=3;
+    setScores(pathFinder);
+    openList.add(pathFinder);
+    if (pathFinder.x==target.x && pathFinder.y==target.y) {
+      noDistance=true;
+    }
+    while (!success && !unreachable && !noDistance) {
+      ArrayList<PVector> tempAL = getNeighbours(pathFinder);
+      for (int i=0; i<tempAL.size(); i++)
+        if (!checkOL(tempAL.get(i)) && !checkCL(tempAL.get(i))) {
+          openList.add(tempAL.get(i));
+          vToSq(tempAL.get(i)).setParent(pathFinder);
+          calculateScores(tempAL.get(i));
+        }
+      closedList.add(pathFinder);
+
+
+      if (pathFinder.x==target.x && pathFinder.y==target.y) {
+        success=true;
+        openList.remove(positionOL(pathFinder));
+      } else if (openList.size()>=1) {
+        pathFinder=getLowestF();
+        openList.remove(positionOL(pathFinder));
+      } else {
+        unreachable=true;
+      }
+    }
+
+    if (noDistance) {
+      vToSq(target).setParent(target);
+      lastPath.add(target);
+      return lastPath;
+    }
+    if (success) {
+      PVector way = new PVector(target.x, target.y);
+      //PVector temp=new PVector (0, 0);
+      while (way!=start) {
+        lastPath.add(way);
+        way=vToSq(way).getParent();
+        //way=temp;
+      }
+      return lastPath;
+    } else {   
+      lastPath.add(new PVector (0, 0));
+      return lastPath;
+    }
+  }
+
+  void displayLastPath() {
+    if (lastPath.size()!=0) {
+      for (int i=0; i<lastPath.size(); i++) {
+        fill(#CB3AC5, 100);
+        pushMatrix();
+        translate((width-rows*size)/2, (height-columns*size)/2);
+        rect(lastPath.get(i).x*size, lastPath.get(i).y*size, size, size);
+        popMatrix();
+        fill(#CB3AC5, 255);
+      }
+    }
+  }
+
+
+  int lastPathLength() {
+    return lastPath.size();
+  }
+
+  void displayOL() {
+    fill(0);
+    textSize(16);
+    text("Open List", width-width/6, 64);
+    strokeWeight(3);
+    stroke(#00FF12);
+    for (int i=0; i<openList.size(); i++) {
+      text(i+1+": "+openList.get(i).x+" | "+openList.get(i).y+"\n", 700, i*16+96);
+      noFill();
+      pushMatrix();
+      translate((width-rows*size)/2, (height-columns*size)/2);
+      rect(openList.get(i).x*size, openList.get(i).y*size, size, size);
+      popMatrix();
+    }
+    stroke(1);
+  }
+
+  void displayCL() {
+
+    fill(0);
+    textSize(16);
+    text("Closed List", 0, 64);
+    strokeWeight(3);
+    stroke(#FF0313);
+    for (int i=0; i<closedList.size(); i++) {
+      text(i+1+": "+closedList.get(i).x+" | "+closedList.get(i).y+"\n", 10, i*16+96);
+      noFill();
+      pushMatrix();
+      translate((width-rows*size)/2, (height-columns*size)/2);
+      rect(closedList.get(i).x*size, closedList.get(i).y*size, size, size);
+      popMatrix();
+    }
+    stroke(1);
+  }
+
+  boolean checkOL(PVector t) {
+    for (int i=0; i<openList.size(); i++) {
+      if (openList.get(i).x==t.x && openList.get(i).y==t.y) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  int positionOL(PVector t) {
+    for (int i=0; i<openList.size(); i++) {
+      if (openList.get(i).x==t.x && openList.get(i).y==t.y) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  boolean checkCL(PVector t) {
+    for (int i=0; i<closedList.size(); i++) {
+      if (closedList.get(i).x==t.x && closedList.get(i).y==t.y) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  PVector getLowestF() {
+    PVector tempV = openList.get(openList.size()-1);
+    for (int i=0; i<openList.size(); i++) {        
+      if (vToSq(tempV).getFScore()>=vToSq(openList.get(i)).getFScore() && checkOL(openList.get(i))) {
+        tempV=openList.get(i);
+        //println("LowestF "+openList.get(i).x+" | "+openList.get(i).y);
+      }
+    }
+    return tempV;
+  }
+
+  PVector getGreatestF() {
+    PVector tempV = new PVector(start.x, start.y);
+    for (int i=0; i<openList.size(); i++) {        
+      if (vToSq(tempV).getFScore()<vToSq(openList.get(i)).getFScore() && checkOL(openList.get(i))) {
+        tempV=openList.get(i);
+      }
+    }
+    return tempV;
+  }
+
+  void clearOL() {    
+    if (openList.size()!=0) {
+      for (int i=openList.size(); i>0; i--) {
+        openList.remove(i-1);
+      }
+    }
+  }
+
+  void clearCL() {
+    if (closedList.size()!=0) {
+      for (int i=closedList.size(); i>0; i--) {
+        closedList.remove(i-1);
+      }
+    }
+  }
+
+  void setStartAndTarget(PVector tStart, PVector tTarget) {
+    sQmap[int(tStart.x)][int(tStart.y)].setCContent(4);
+    openList.add(new PVector(tStart.x, tStart.y));
+    int counter=0;
+    Square s = new Square(0, 0, 0, 0);
+    ArrayList<Square> neighb = getNeighbours((int)tTarget.x, (int)tTarget.y); //fill array with Squares neighbouring target
+    //println(sQmap[int(tTarget.x)][int(tTarget.y)].getCContent());
+    while (sQmap[int(tTarget.x)][int(tTarget.y)].getCContent()==0 && counter<neighb.size()) { //checking the map contents on target position (to prevent overriding)
+      //if (counter%2==0) {
+      //  tTarget.x++;
+      //} else {
+      //  tTarget.y++;
+      //}
+      s = neighb.get(counter); //iterate through neighbours of target
+      if (s.getCContent()==1) { //if current neighbour is not obstructed, change target to that square
+        tTarget.x=s.position.x;
+        tTarget.y=s.position.y;
+      }
+
+      counter++;
+      if (counter==neighb.size()) { //no unobstructed neighbour found
+        println("No neightbour found");
+      }
+    }
+    sQmap[int(tTarget.x)][int(tTarget.y)].setCContent(3);
+  }
+
+  PVector getTarget() {
+    return target;
+  }
+
+  PVector getStart() {
+    return start;
+  }
+
+  Square getSQmapSquare (int tRow, int tColumn) {
+    if (tRow>=0 && tRow<sQmap.length && tColumn>=0 && tColumn<sQmap.length) {
+      return sQmap[tRow][tColumn];
+    } else {
+      return null;
+    }
+  }
+
+  ArrayList<Square> getNeighbours(int tRow, int tColumn) {
+    ArrayList<Square> neighbours = new ArrayList<Square>();
+
+    if (getSQmapSquare(tRow-1, tColumn-1)!=null && getSQmapSquare(tRow-1, tColumn-1).getCContent()==1) { //up left
+      neighbours.add(sQmap[tRow-1][tColumn-1]);
+    }
+
+    if (getSQmapSquare(tRow, tColumn-1)!=null && getSQmapSquare(tRow, tColumn-1).getCContent()==1) { //up
+      neighbours.add(sQmap[tRow][tColumn-1]);
+    }
+
+    if (getSQmapSquare(tRow+1, tColumn-1)!=null && getSQmapSquare(tRow+1, tColumn-1).getCContent()==1) { //up right
+      neighbours.add(sQmap[tRow+1][tColumn-1]);
+    }
+
+    if (getSQmapSquare(tRow-1, tColumn)!=null && getSQmapSquare(tRow-1, tColumn).getCContent()==1) { //left
+      neighbours.add(sQmap[tRow-1][tColumn]);
+    }
+
+    if (getSQmapSquare(tRow+1, tColumn)!=null && getSQmapSquare(tRow+1, tColumn).getCContent()==1) { //right
+      neighbours.add(sQmap[tRow+1][tColumn]);
+    }
+
+    if (getSQmapSquare(tRow-1, tColumn+1)!=null && getSQmapSquare(tRow-1, tColumn+1).getCContent()==1) { //down left
+      neighbours.add(sQmap[tRow-1][tColumn+1]);
+    }
+
+    if (getSQmapSquare(tRow, tColumn+1)!=null && getSQmapSquare(tRow, tColumn+1).getCContent()==1) { //down
+      neighbours.add(sQmap[tRow][tColumn+1]);
+    }
+
+    if (getSQmapSquare(tRow+1, tColumn+1)!=null && getSQmapSquare(tRow+1, tColumn+1).getCContent()==1) { //down right
+      neighbours.add(sQmap[tRow+1][tColumn+1]);
+    }
+
+    return neighbours;
+  }
+
+  Square vToSq(PVector v) {
+    return sQmap[int(v.x)][int(v.y)];
+  }
+
+  void display() {
+    pushMatrix();
+    //translate((width-rows*size)/2, (height-columns*size)/2);
+
+    for (int x=0; x<rows; x++) {
+      for (int y=0; y<columns; y++) {
+        sQmap[x][y].display();
+      }
+    }
+    popMatrix();
+  }
+
+  void setScores(PVector t) {
+    sQmap[int(t.x)][int(t.y)].setGScore(0);
+    sQmap[int(t.x)][int(t.y)].setHScore(1+int(abs(t.x-target.x)+abs(t.y-target.y)));
+    sQmap[int(t.x)][int(t.y)].setFScore(vToSq(t).getGScore()+vToSq(t).getHScore());
+  }
+
+  void calculateScores(PVector t) {
+    sQmap[int(t.x)][int(t.y)].setHScore(1+int(abs(t.x-getTarget().x)+abs(t.y-getTarget().y)));
+    sQmap[int(t.x)][int(t.y)].setGScore(vToSq(vToSq(t).getParent()).getGScore()+1);
+    sQmap[int(t.x)][int(t.y)].setFScore(vToSq(t).getGScore()+vToSq(t).getHScore());
+  }
+}
+
+////////
+//Square-class for Pathfinding V(1.0)
+//for use with AStarPF
+////////
+
+class Square {
+  private PVector parent;
+  private int size;
+  private PVector position = new PVector();
+  private int content;
+  //private boolean walkable;
+  private int fScore; //complete Score (G+H)
+  private int gScore; //cost to get there
+  private int hScore; //cost from here to target
+
+
+  Square(int tRow, int tColumn, int tContent, int tSize) {
+    size=tSize;
+    position.x=tRow;
+    position.y=tColumn;
+    content=tContent;
+    //if (content==0) {
+    //  walkable=false;
+    //} else {
+    //  walkable=true;
+    //}
+  }
+  //
+
+  int getXRow() {
+    return int(position.x);
+  }
+
+  int getYCol() {
+    return int(position.y);
+  }
+
+  void display() {  
+    stroke(#CCCCCC);
+    strokeWeight(1);
+    rectMode(CORNER);
+    if (content==0) {
+      fill(#FF0000, 120);
+      rect(position.x*size, position.y*size, size, size);
+    } else if (content==1) {
+      //fill(#FFFFFF);
+      noFill();
+      rect(position.x*size, position.y*size, size, size);
+    } else if (content==3) {
+      noFill();
+      rect(position.x*size, position.y*size, size, size);
+      drawCross(int(position.x), int(position.y));
+    } else if (content==4) {      
+      noFill();
+      rect(position.x*size, position.y*size, size, size);
+      ellipseMode(CENTER);
+      fill(#27A72E);
+      ellipse(position.x*size, position.y*size, size, size);
+    }
+
+    /*
+    if (checkOL(position)) {
+     textSize(12);
+     textAlign(CORNER);
+     fill(0);
+     text(fScore, position.x*size, position.y*size+12);
+     text(gScore, position.x*size, position.y*size+size);
+     text(hScore, position.x*size+size-12, position.y*size+size);
+     }
+     */
+  }
+
+  int getCContent() {
+    return content;
+  }
+
+  void setCContent(int i) {
+    this.content=i;
+  }
+
+  void setCross() {
+    this.content=3;
+  }
+
+  void setStart() {
+    this.content=4;
+  }
+
+
+  void drawCross(float row, float column) {
+    stroke(#F02C2C);
+    strokeWeight(5);
+    pushMatrix();
+    translate(row*size, column*size);
+    rotate(radians(45));
+    translate(10, 0);
+    rect(0, 0, sqrt(2*sq(size))-20, 0);
+    translate(-10, 0);
+    rotate(radians(-45));
+    translate(size, 0);
+    rotate(radians(135));
+    translate(10, 0);
+    rect(0, 0, sqrt(2*sq(size))-20, 0);
+    popMatrix();
+  }
+
+  void setParent(PVector temp) {
+    parent = temp;
+  }
+
+  PVector getParent() {
+    return parent;
+  }
+
+  int getGScore() {
+    return gScore;
+  }
+
+  int getFScore() {
+    return fScore;
+  }
+
+  int getHScore() {
+    return hScore;
+  }
+
+  void setGScore(int t) {
+    gScore=t;
+  }
+
+  void setFScore(int t) {
+    fScore=t;
+  }
+
+  void setHScore(int t) {
+    hScore=t;
+  }
+}
